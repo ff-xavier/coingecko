@@ -20,7 +20,7 @@ const toDate = Math.floor(new Date("2024-12-31").getTime() / 1000);
 
 async function fetchData() {
   try {
-    const response = await axios.get(url, {
+    const { data } = await axios.get(url, {
       params: {
         vs_currency: "usd",
         from: fromDate,
@@ -33,11 +33,20 @@ async function fetchData() {
     });
 
     // Save response to JSON file
-    fs.writeFileSync(
-      "data/bitcoin_data.json",
-      JSON.stringify(response.data, null, 2)
-    );
+    fs.writeFileSync("data/bitcoin_data.json", JSON.stringify(data, null, 2));
     console.log("✅ Data saved to bitcoin_data.json");
+
+    // Convert prices -> CSV
+    const header = "date,price\n";
+    const rows = data.prices
+      .map(([timestamp, price]) => {
+        const date = new Date(timestamp).toISOString().split("T")[0]; // YYYY-MM-DD
+        return `${date},${price}`;
+      })
+      .join("\n");
+
+    fs.writeFileSync("data/bitcoin_data.csv", header + rows);
+    console.log("✅ Data saved to bitcoin_data.csv");
   } catch (error) {
     console.error(
       "❌ Error fetching data:",
