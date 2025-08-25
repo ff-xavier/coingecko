@@ -10,13 +10,13 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-// Coingecko Pro API endpoint
-const url =
-  "https://pro-api.coingecko.com/api/v3/coins/bitcoin/market_chart/range";
-
+const cgId = "litecoin";
 // UNIX timestamps required by Coingecko
-const fromDate = Math.floor(new Date("2024-01-01").getTime() / 1000);
-const toDate = Math.floor(new Date("2024-12-31").getTime() / 1000);
+const fromDate = Math.floor(new Date("2022-01-01").getTime() / 1000);
+const toDate = Math.floor(new Date("2025-08-25").getTime() / 1000);
+
+// Coingecko Pro API endpoint
+const url = `https://pro-api.coingecko.com/api/v3/coins/${cgId}/market_chart/range`;
 
 async function fetchData() {
   try {
@@ -33,8 +33,8 @@ async function fetchData() {
     });
 
     // Save response to JSON file
-    fs.writeFileSync("data/bitcoin_data.json", JSON.stringify(data, null, 2));
-    console.log("✅ Data saved to bitcoin_data.json");
+    fs.writeFileSync(`data/${cgId}.json`, JSON.stringify(data, null, 2));
+    console.log(`✅ Data saved to data/${cgId}.json`);
 
     // Convert prices -> CSV
     const header = "date,price\n";
@@ -45,8 +45,8 @@ async function fetchData() {
       })
       .join("\n");
 
-    fs.writeFileSync("data/bitcoin_data.csv", header + rows);
-    console.log("✅ Data saved to bitcoin_data.csv");
+    fs.writeFileSync(`data/${cgId}.csv`, header + rows);
+    console.log(`✅ Data saved to data/${cgId}.csv`);
   } catch (error) {
     console.error(
       "❌ Error fetching data:",
