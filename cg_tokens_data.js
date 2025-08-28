@@ -17,11 +17,9 @@ const VS_CURRENCY = process.env.CG_VS_CURRENCY || "usd";
 const ORDER = process.env.CG_ORDER || "market_cap_desc";
 const PER_PAGE = 250; // max allowed
 const BASE_URL = "https://pro-api.coingecko.com/api/v3/coins/markets";
-// Optional safety cap on pages in case of unexpected API behavior
-const MAX_PAGES = 200; // 200 * 250 = 50,000 rows
-const REQUEST_DELAY_MS = 250; // small delay to be gentle on rate limits
+const MAX_PAGES = 200; // safety cap
+const REQUEST_DELAY_MS = 250;
 
-// ensure ./data exists
 const DATA_DIR = "data";
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -36,10 +34,9 @@ async function fetchPage(page) {
       order: ORDER,
       per_page: PER_PAGE,
       page,
-      // optional extras you may want:
+      // You can add extras if needed (they'll be ignored in CSV if nested):
       // price_change_percentage: "1h,24h,7d,30d,1y",
       // sparkline: true,
-      // locale: "en"
     },
     headers: {
       accept: "application/json",
@@ -48,7 +45,6 @@ async function fetchPage(page) {
     timeout: 30_000,
   });
 
-  // Optional: inspect rate-limit headers if present
   const remaining = headers["x-ratelimit-remaining"];
   const reset = headers["x-ratelimit-reset"];
   if (remaining !== undefined) {
@@ -77,7 +73,6 @@ async function fetchAllPages() {
     } catch (err) {
       const msg = err.response?.data || err.message;
       console.error(`❌ Error on page ${page}:`, msg);
-      // Simple retry once after a brief backoff
       await sleep(1500);
       try {
         console.log(`↻ Retrying page ${page}...`);
@@ -106,7 +101,7 @@ async function fetchAllPages() {
     await sleep(REQUEST_DELAY_MS);
   }
 
-  // (Optional) de-duplicate by id just in case
+  // de-duplicate by id just in case
   const deduped = [];
   const seen = new Set();
   for (const r of all) {
@@ -119,15 +114,93 @@ async function fetchAllPages() {
   return deduped;
 }
 
+// ----- CSV helpers (top-level primitives only) -----
+function isPrimitiveCSVValue(v) {
+  const t = typeof v;
+  return v === null || t === "string" || t === "number" || t === "boolean";
+}
+
+function collectPrimitiveKeys(rows) {
+  const keys = new Set();
+  for (const row of rows) {
+    for (const [k, v] of Object.entries(row)) {
+      if (isPrimitiveCSVValue(v)) keys.add(k);
+    }
+  }
+  return keys;
+}
+
+// Prefer a sensible column order if present, then append the rest (sorted)
+const PREFERRED_ORDER = [
+  "id",
+  "symbol",
+  "name",
+  "market_cap_rank",
+  "current_price",
+  "market_cap",
+  "fully_diluted_valuation",
+  "total_volume",
+  "high_24h",
+  "low_24h",
+  "price_change_24h",
+  "price_change_percentage_24h",
+  "circulating_supply",
+  "total_supply",
+  "max_supply",
+  "ath",
+  "ath_change_percentage",
+  "ath_date",
+  "atl",
+  "atl_change_percentage",
+  "atl_date",
+  "last_updated",
+  "image", // url string
+];
+
+function buildOrderedHeaders(allKeys) {
+  const presentPreferred = PREFERRED_ORDER.filter((k) => allKeys.has(k));
+  const remaining = [...allKeys].filter((k) => !presentPreferred.includes(k));
+  remaining.sort((a, b) => a.localeCompare(b));
+  return [...presentPreferred, ...remaining];
+}
+
+function csvEscape(val) {
+  if (val === null || val === undefined) return "";
+  let s = String(val);
+  if (s.includes('"')) s = s.replace(/"/g, '""');
+  if (/[",\n\r]/.test(s)) s = `"${s}"`;
+  return s;
+}
+
+function toCSV(rows) {
+  if (!rows || rows.length === 0) return "";
+  const allKeys = collectPrimitiveKeys(rows);
+  const headers = buildOrderedHeaders(allKeys);
+  const headerLine = headers.join(",");
+
+  const lines = rows.map((row) =>
+    headers
+      .map((k) => (isPrimitiveCSVValue(row[k]) ? csvEscape(row[k]) : ""))
+      .join(",")
+  );
+
+  return [headerLine, ...lines].join("\n");
+}
+
 async function main() {
   try {
     const results = await fetchAllPages();
 
-    const outfile = path.join(DATA_DIR, "coins_markets_all.json");
-    fs.writeFileSync(outfile, JSON.stringify(results, null, 2));
-    console.log(
-      `💾 Saved ${results.length} rows to ${outfile} (vs_currency=${VS_CURRENCY}, order=${ORDER})`
-    );
+    // JSON output
+    const jsonOut = path.join(DATA_DIR, "coins_markets_all.json");
+    fs.writeFileSync(jsonOut, JSON.stringify(results, null, 2));
+    console.log(`💾 Saved ${results.length} rows to ${jsonOut}`);
+
+    // CSV output (top-level primitive fields only)
+    const csv = toCSV(results);
+    const csvOut = path.join(DATA_DIR, "coins_markets_all.csv");
+    fs.writeFileSync(csvOut, csv, "utf8");
+    console.log(`💾 Saved CSV to ${csvOut}`);
   } catch (error) {
     console.error("❌ Unhandled error:", error.response?.data || error.message);
     process.exit(1);
