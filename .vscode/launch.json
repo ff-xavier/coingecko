@@ -10,6 +10,13 @@
       "name": "cg_market_chart_range.js",
       "skipFiles": ["<node_internals>/**"],
       "program": "${workspaceFolder}/cg_market_chart_range.js"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "cg_tokens_data.js",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/cg_tokens_data.js"
     }
   ]
 }
